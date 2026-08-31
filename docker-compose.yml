@@ -1,0 +1,68 @@
+services:
+
+  frontend:
+    build:
+      context: ./app/frontend
+
+    container_name: platform-frontend
+
+    ports:
+      - "5173:80"
+
+    depends_on:
+      - backend
+
+    restart: unless-stopped
+
+
+  backend:
+    build:
+      context: ./app/backend
+
+    container_name: platform-backend
+
+    ports:
+      - "8000:8000"
+
+    environment:
+      DATABASE_URL: postgresql://platform:platform@postgres:5432/platform
+      FRONTEND_URL: http://localhost:5173
+      ENVIRONMENT: development
+      APP_VERSION: 1.0.0
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    restart: unless-stopped
+
+
+  postgres:
+    image: postgres:16-alpine
+
+    container_name: platform-postgres
+
+    environment:
+      POSTGRES_DB: platform
+      POSTGRES_USER: platform
+      POSTGRES_PASSWORD: platform
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U platform -d platform"
+        ]
+
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    restart: unless-stopped
+
+
+volumes:
+  postgres_data:

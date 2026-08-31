@@ -1,0 +1,28 @@
+# Node
+node_modules/
+frontend/node_modules/
+npm-debug.log*
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+dist/
+# Build
+frontend/dist/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+
+# OS
+.DS_Store
+Thumbs.db
