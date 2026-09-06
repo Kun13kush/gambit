@@ -3,7 +3,6 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .database import Base, engine
 from .routes import deployments, health, services
 
 app = FastAPI(
@@ -24,8 +23,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-Base.metadata.create_all(bind=engine)
 
 
 app.include_router(health.router)
