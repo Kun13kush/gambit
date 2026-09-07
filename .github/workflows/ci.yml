@@ -161,7 +161,6 @@ jobs:
             --exit-code 1 \
             ./app/frontend
 
-
   integration-test:
     name: Integration Tests
     runs-on: ubuntu-latest
@@ -185,6 +184,7 @@ jobs:
             if docker compose exec -T postgres \
               pg_isready -U platform -d platform; then
               echo "PostgreSQL is ready"
+              sleep 5  # Add extra delay for DNS resolution
               exit 0
             fi
 
@@ -201,6 +201,7 @@ jobs:
           for i in {1..30}; do
             if curl -fsS http://localhost:8000/health; then
               echo "Backend is healthy"
+              sleep 2  # Add extra delay
               exit 0
             fi
 
