@@ -26,3 +26,23 @@ frontend/dist/
 # OS
 .DS_Store
 Thumbs.db
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+
+# Node
+node_modules/
+dist/
+npm-debug.log*
+
+# Security reports
+security-reports/
+trivy-results/

@@ -1,0 +1,11 @@
+title = "Gambit Secret Detection"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allow example/test values that are intentionally non-secret"
+paths = [
+    '''(^|/)\.env\.example$''',
+    '''(^|/)README\.md$'''
+]

@@ -3,6 +3,8 @@ services:
   frontend:
     build:
       context: ./app/frontend
+    security_opt:
+      - no-new-privileges:true
 
     container_name: platform-frontend
 
@@ -18,6 +20,8 @@ services:
   backend:
     build:
       context: ./app/backend
+    security_opt:
+      - no-new-privileges:true
 
     container_name: platform-backend
 
