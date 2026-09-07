@@ -120,13 +120,13 @@ jobs:
         run: |
           docker build \
             -t gambit-backend:${{ github.sha }} \
-            ./backend
+            ./app/backend
 
       - name: Build frontend image
         run: |
           docker build \
             -t gambit-frontend:${{ github.sha }} \
-            ./frontend
+            ./app/frontend
 
       - name: Install Trivy
         uses: aquasecurity/setup-trivy@v0.2.3
@@ -152,74 +152,75 @@ jobs:
           trivy config \
             --severity HIGH,CRITICAL \
             --exit-code 1 \
-            ./backend
+            ./app/backend
 
       - name: Scan frontend Dockerfile
         run: |
           trivy config \
             --severity HIGH,CRITICAL \
             --exit-code 1 \
-            ./frontend
+            ./app/frontend
 
-integration-test:
-  name: Integration Tests
-  runs-on: ubuntu-latest
 
-  needs:
-    - docker
+  integration-test:
+    name: Integration Tests
+    runs-on: ubuntu-latest
 
-  steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+    needs:
+      - docker
 
-    - name: Start Gambit stack
-      run: docker compose up -d --build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Check services
-      run: docker compose ps
+      - name: Start Gambit stack
+        run: docker compose up -d --build
 
-    - name: Wait for PostgreSQL
-      run: |
-        for i in {1..30}; do
-          if docker compose exec -T postgres \
-            pg_isready -U platform -d platform; then
-            echo "PostgreSQL is ready"
-            exit 0
-          fi
+      - name: Check services
+        run: docker compose ps
 
-          echo "Waiting for PostgreSQL..."
-          sleep 2
-        done
+      - name: Wait for PostgreSQL
+        run: |
+          for i in {1..30}; do
+            if docker compose exec -T postgres \
+              pg_isready -U platform -d platform; then
+              echo "PostgreSQL is ready"
+              exit 0
+            fi
 
-        echo "PostgreSQL failed to become ready"
-        docker compose logs postgres
-        exit 1
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
 
-    - name: Wait for backend
-      run: |
-        for i in {1..30}; do
-          if curl -fsS http://localhost:8000/health; then
-            echo "Backend is healthy"
-            exit 0
-          fi
+          echo "PostgreSQL failed to become ready"
+          docker compose logs postgres
+          exit 1
 
-          echo "Waiting for backend..."
-          sleep 2
-        done
+      - name: Wait for backend
+        run: |
+          for i in {1..30}; do
+            if curl -fsS http://localhost:8000/health; then
+              echo "Backend is healthy"
+              exit 0
+            fi
 
-        echo "Backend failed to become healthy"
-        docker compose logs backend
-        exit 1
+            echo "Waiting for backend..."
+            sleep 2
+          done
 
-    - name: Run integration tests
-      run: |
-        docker compose exec -T backend \
-          pytest -v tests/integration
+          echo "Backend failed to become healthy"
+          docker compose logs backend
+          exit 1
 
-    - name: Show logs on failure
-      if: failure()
-      run: docker compose logs
+      - name: Run integration tests
+        run: |
+          docker compose exec -T backend \
+            pytest -v tests/integration
 
-    - name: Shutdown
-      if: always()
-      run: docker compose down -v
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Shutdown
+        if: always()
+        run: docker compose down -v
