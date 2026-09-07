@@ -129,7 +129,7 @@ jobs:
             ./app/frontend
 
       - name: Install Trivy
-        uses: aquasecurity/setup-trivy@v0.2.4
+        uses: aquasecurity/setup-trivy@latest
 
       - name: Scan backend image
         run: |
