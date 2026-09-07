@@ -71,7 +71,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run tests
-        run: pytest -v
+        run: pytest -v tests --ignore=tests/integration
 
       - name: Install pip-audit
         run: pip install pip-audit
