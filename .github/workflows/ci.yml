@@ -215,6 +215,7 @@ jobs:
 
       - name: Run integration tests
         run: |
+          sleep 20
           docker compose exec -T backend \
             pytest -v tests/integration
 
