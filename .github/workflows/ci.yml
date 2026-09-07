@@ -128,16 +128,10 @@ jobs:
             -t gambit-frontend:${{ github.sha }} \
             ./app/frontend
 
-      - name: Install Trivy
-        run: |
-          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | apt-key add -
-          echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | tee -a /etc/apt/sources.list.d/trivy.list
-          apt-get update
-          apt-get install -y trivy
-
       - name: Scan backend image
         run: |
-          trivy image \
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy image \
             --severity HIGH,CRITICAL \
             --exit-code 1 \
             --ignore-unfixed \
@@ -145,7 +139,8 @@ jobs:
 
       - name: Scan frontend image
         run: |
-          trivy image \
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy image \
             --severity HIGH,CRITICAL \
             --exit-code 1 \
             --ignore-unfixed \
