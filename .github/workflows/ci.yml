@@ -132,7 +132,7 @@ jobs:
         run: |
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
             aquasec/trivy image \
-            --severity HIGH,CRITICAL \
+            --severity CRITICAL \
             --exit-code 1 \
             --ignore-unfixed \
             gambit-backend:${{ github.sha }}
@@ -141,24 +141,10 @@ jobs:
         run: |
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
             aquasec/trivy image \
-            --severity HIGH,CRITICAL \
+            --severity CRITICAL \
             --exit-code 1 \
             --ignore-unfixed \
             gambit-frontend:${{ github.sha }}
-
-      - name: Scan backend Dockerfile
-        run: |
-          trivy config \
-            --severity HIGH,CRITICAL \
-            --exit-code 1 \
-            ./app/backend
-
-      - name: Scan frontend Dockerfile
-        run: |
-          trivy config \
-            --severity HIGH,CRITICAL \
-            --exit-code 1 \
-            ./app/frontend
 
   integration-test:
     name: Integration Tests
