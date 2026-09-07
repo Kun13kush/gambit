@@ -1,3 +1,5 @@
+import PropTypes from "prop-types";
+
 function App() {
   return (
     <div className="app">
@@ -127,6 +129,11 @@ function Status({ name, status }) {
   )
 }
 
+Status.propTypes = {
+  name: PropTypes.string.isRequired,
+  status: PropTypes.string.isRequired,
+};
+
 function Metric({ label, value }) {
   return (
     <div className="metric">
@@ -135,5 +142,10 @@ function Metric({ label, value }) {
     </div>
   )
 }
+
+Metric.propTypes = {
+  label: PropTypes.string.isRequired,
+  value: PropTypes.string.isRequired,
+};
 
 export default App
