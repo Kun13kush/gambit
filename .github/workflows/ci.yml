@@ -239,7 +239,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          role-to-assume: arn:aws:iam::732108543574:role/GambitECRPushPolicy
           aws-region: ${{ vars.AWS_REGION }}
 
       - name: Verify AWS identity
