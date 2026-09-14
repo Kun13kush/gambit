@@ -16,6 +16,10 @@ permissions:
 
 jobs:
 
+  # ============================================================
+  # FRONTEND CI
+  # ============================================================
+
   frontend:
     name: Frontend CI
     runs-on: ubuntu-latest
@@ -47,6 +51,10 @@ jobs:
       - name: Dependency audit
         run: npm audit --audit-level=high
 
+
+  # ============================================================
+  # BACKEND CI
+  # ============================================================
 
   backend:
     name: Backend CI
@@ -80,6 +88,10 @@ jobs:
         run: pip-audit -r requirements.txt --strict
 
 
+  # ============================================================
+  # SECRET DETECTION
+  # ============================================================
+
   secret-scan:
     name: Secret Detection
     runs-on: ubuntu-latest
@@ -95,6 +107,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+
+  # ============================================================
+  # DOCKER BUILD + SECURITY
+  # ============================================================
 
   docker:
     name: Docker Build & Security Scan
@@ -130,7 +146,8 @@ jobs:
 
       - name: Scan backend image
         run: |
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
             aquasec/trivy image \
             --severity CRITICAL \
             --exit-code 1 \
@@ -139,12 +156,18 @@ jobs:
 
       - name: Scan frontend image
         run: |
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
             aquasec/trivy image \
             --severity CRITICAL \
             --exit-code 1 \
             --ignore-unfixed \
             gambit-frontend:${{ github.sha }}
+
+
+  # ============================================================
+  # INTEGRATION TESTS
+  # ============================================================
 
   integration-test:
     name: Integration Tests
@@ -169,7 +192,7 @@ jobs:
             if docker compose exec -T postgres \
               pg_isready -U platform -d platform; then
               echo "PostgreSQL is ready"
-              sleep 5  # Add extra delay for DNS resolution
+              sleep 5
               exit 0
             fi
 
@@ -186,7 +209,7 @@ jobs:
           for i in {1..30}; do
             if curl -fsS http://localhost:8000/health; then
               echo "Backend is healthy"
-              sleep 2  # Add extra delay
+              sleep 2
               exit 0
             fi
 
@@ -211,6 +234,11 @@ jobs:
       - name: Shutdown
         if: always()
         run: docker compose down -v
+
+
+  # ============================================================
+  # PUSH IMAGES TO ECR
+  # ============================================================
 
   ecr:
     name: Push Images to Amazon ECR
@@ -271,3 +299,197 @@ jobs:
         run: |
           docker push \
             ${{ steps.login-ecr.outputs.registry }}/gambit-frontend:${{ github.sha }}
+
+
+  # ============================================================
+  # ECS DEPLOYMENT
+  # ============================================================
+
+  ecs-deploy:
+    name: Deploy to Amazon ECS
+    runs-on: ubuntu-latest
+
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+
+    needs:
+      - ecr
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+
+      # --------------------------------------------------------
+      # CHECKOUT
+      # --------------------------------------------------------
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+
+      # --------------------------------------------------------
+      # CONFIGURE AWS
+      # --------------------------------------------------------
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::732108543574:role/GitHubActionsECRRole
+          aws-region: eu-west-2
+
+
+      # --------------------------------------------------------
+      # VERIFY AWS
+      # --------------------------------------------------------
+
+      - name: Verify AWS identity
+        run: |
+          aws sts get-caller-identity
+
+
+      # --------------------------------------------------------
+      # DOWNLOAD CURRENT BACKEND TASK DEFINITION
+      # --------------------------------------------------------
+
+      - name: Download backend task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition gambit-production-backend \
+            --query taskDefinition \
+            > backend-task-definition.json
+
+
+      # --------------------------------------------------------
+      # DOWNLOAD CURRENT FRONTEND TASK DEFINITION
+      # --------------------------------------------------------
+
+      - name: Download frontend task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition gambit-production-frontend \
+            --query taskDefinition \
+            > frontend-task-definition.json
+
+
+      # --------------------------------------------------------
+      # UPDATE BACKEND IMAGE
+      # --------------------------------------------------------
+
+      - name: Update backend task definition
+        id: backend-task
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: backend-task-definition.json
+          container-name: backend
+          image: 732108543574.dkr.ecr.eu-west-2.amazonaws.com/gambit-backend:${{ github.sha }}
+
+
+      # --------------------------------------------------------
+      # UPDATE FRONTEND IMAGE
+      # --------------------------------------------------------
+
+      - name: Update frontend task definition
+        id: frontend-task
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: frontend-task-definition.json
+          container-name: frontend
+          image: 732108543574.dkr.ecr.eu-west-2.amazonaws.com/gambit-frontend:${{ github.sha }}
+
+
+      # --------------------------------------------------------
+      # REGISTER BACKEND TASK DEFINITION
+      # --------------------------------------------------------
+
+      - name: Register backend task definition
+        id: register-backend
+        run: |
+          BACKEND_TASK_DEFINITION=$(aws ecs register-task-definition \
+            --cli-input-json file://${{ steps.backend-task.outputs.task-definition }} \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+
+          echo "BACKEND_TASK_DEFINITION=$BACKEND_TASK_DEFINITION" >> "$GITHUB_ENV"
+
+          echo "Registered backend task definition:"
+          echo "$BACKEND_TASK_DEFINITION"
+
+
+      # --------------------------------------------------------
+      # REGISTER FRONTEND TASK DEFINITION
+      # --------------------------------------------------------
+
+      - name: Register frontend task definition
+        id: register-frontend
+        run: |
+          FRONTEND_TASK_DEFINITION=$(aws ecs register-task-definition \
+            --cli-input-json file://${{ steps.frontend-task.outputs.task-definition }} \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+
+          echo "FRONTEND_TASK_DEFINITION=$FRONTEND_TASK_DEFINITION" >> "$GITHUB_ENV"
+
+          echo "Registered frontend task definition:"
+          echo "$FRONTEND_TASK_DEFINITION"
+
+
+      # --------------------------------------------------------
+      # UPDATE BACKEND ECS SERVICE
+      # --------------------------------------------------------
+
+      - name: Update backend ECS service
+        run: |
+          aws ecs update-service \
+            --cluster gambit-production \
+            --service gambit-production-backend \
+            --task-definition "$BACKEND_TASK_DEFINITION"
+
+
+      # --------------------------------------------------------
+      # UPDATE FRONTEND ECS SERVICE
+      # --------------------------------------------------------
+
+      - name: Update frontend ECS service
+        run: |
+          aws ecs update-service \
+            --cluster gambit-production \
+            --service gambit-production-frontend \
+            --task-definition "$FRONTEND_TASK_DEFINITION"
+
+
+      # --------------------------------------------------------
+      # WAIT FOR BACKEND
+      # --------------------------------------------------------
+
+      - name: Wait for backend deployment
+        run: |
+          aws ecs wait services-stable \
+            --cluster gambit-production \
+            --services gambit-production-backend
+
+
+      # --------------------------------------------------------
+      # WAIT FOR FRONTEND
+      # --------------------------------------------------------
+
+      - name: Wait for frontend deployment
+        run: |
+          aws ecs wait services-stable \
+            --cluster gambit-production \
+            --services gambit-production-frontend
+
+
+      # --------------------------------------------------------
+      # VERIFY SERVICES
+      # --------------------------------------------------------
+
+      - name: Verify ECS services
+        run: |
+          aws ecs describe-services \
+            --cluster gambit-production \
+            --services \
+              gambit-production-backend \
+              gambit-production-frontend \
+            --query 'services[].{Name:serviceName,Desired:desiredCount,Running:runningCount,Pending:pendingCount,Status:status}' \
+            --output table
