@@ -54,6 +54,17 @@ resource "aws_subnet" "private_2" {
   }
 }
 
+resource "aws_subnet" "private_3" {
+  vpc_id            = aws_vpc.gambit.id
+  cidr_block        = "10.0.13.0/24"
+  availability_zone = "eu-west-2c"
+
+  tags = {
+    Name = "${var.project_name}-${var.environment}-private-3"
+    Tier = "private"
+  }
+}
+
 resource "aws_internet_gateway" "gambit" {
   vpc_id = aws_vpc.gambit.id
 
