@@ -29,63 +29,64 @@ resource "aws_ecs_task_definition" "backend" {
   execution_role_arn = aws_iam_role.ecs_task_execution.arn
 
   container_definitions = jsonencode([
-  {
-    name      = "backend"
-    image     = "${var.backend_ecr_repository_url}:9aed1b7e72237415c55436cf5cbca47a3346384b"
-    essential = true
+    {
+      name      = "backend"
+      image     = "${var.backend_ecr_repository_url}:9aed1b7e72237415c55436cf5cbca47a3346384b"
+      essential = true
 
-    portMappings = [
-      {
-        containerPort = 8000
-        protocol      = "tcp"
-      }
-    ]
+      portMappings = [
+        {
+          containerPort = 8000
+          protocol      = "tcp"
+        }
+      ]
 
-    environment = [
-      {
-        name  = "ENVIRONMENT"
-        value = "production"
-      },
-      {
-        name  = "APP_VERSION"
-        value = "1.0.0"
-      }
-    ]
+      environment = [
+        {
+          name  = "ENVIRONMENT"
+          value = "production"
+        },
+        {
+          name  = "APP_VERSION"
+          value = "1.0.0"
+        },
+        {
+          name  = "DB_HOST"
+          value = aws_db_instance.gambit.address
+        },
+        {
+          name  = "DB_PORT"
+          value = tostring(aws_db_instance.gambit.port)
+        },
+        {
+          name  = "DB_NAME"
+          value = aws_db_instance.gambit.db_name
+        }
+      ]
 
-    secrets = [
-      {
-        name      = "DB_USERNAME"
-        valueFrom = "${aws_db_instance.gambit.master_user_secret[0].secret_arn}:username::"
-      },
-      {
-        name      = "DB_PASSWORD"
-        valueFrom = "${aws_db_instance.gambit.master_user_secret[0].secret_arn}:password::"
-      },
-      {
-        name      = "DB_HOST"
-        valueFrom = "${aws_db_instance.gambit.master_user_secret[0].secret_arn}:host::"
-      },
-      {
-        name      = "DB_PORT"
-        valueFrom = "${aws_db_instance.gambit.master_user_secret[0].secret_arn}:port::"
-      },
-      {
-        name      = "DB_NAME"
-        valueFrom = "${aws_db_instance.gambit.master_user_secret[0].secret_arn}:dbname::"
-      }
-    ]
+      secrets = [
+        {
+          name      = "DB_USERNAME"
+          valueFrom = "${aws_db_instance.gambit.master_user_secret[0].secret_arn}:username::"
+        },
+        {
+          name      = "DB_PASSWORD"
+          valueFrom = "${aws_db_instance.gambit.master_user_secret[0].secret_arn}:password::"
+        }
+      ]
 
-    logConfiguration = {
-      logDriver = "awslogs"
 
-      options = {
-        awslogs-group         = aws_cloudwatch_log_group.ecs.name
-        awslogs-region        = var.aws_region
-        awslogs-stream-prefix = "backend"
+      logConfiguration = {
+        logDriver = "awslogs"
+
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.ecs.name
+          awslogs-region        = var.aws_region
+          awslogs-stream-prefix = "backend"
+        }
       }
     }
-  }
-])
+  ])
 
   tags = {
     Name = "${var.project_name}-${var.environment}-backend-task"
@@ -146,7 +147,7 @@ resource "aws_ecs_service" "backend" {
 
   desired_count = 1
 
-  launch_type = "FARGATE"
+  launch_type      = "FARGATE"
   platform_version = "1.4.0"
 
   network_configuration {
