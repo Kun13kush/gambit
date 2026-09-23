@@ -427,6 +427,61 @@ jobs:
 
 
       # --------------------------------------------------------
+      # RUN DATABASE MIGRATIONS
+      # ------------------------------------------------
+
+      - name: Run database migrations
+        id: migrate
+        run: |
+          echo "Starting Alembic migration task..."
+
+           MIGRATION_TASK=$(aws ecs run-task \
+            --cluster gambit-production \
+            --launch-type FARGATE \
+            --platform-version 1.4.0 \
+            --task-definition "$BACKEND_TASK_DEFINITION" \
+            --network-configuration 'awsvpcConfiguration={subnets=[subnet-0839debbe7ce3d789,subnet-097743546f0faa3ab],securityGroups=[sg-0c885545cf23c596c],assignPublicIp=DISABLED}' \
+            --overrides '{"containerOverrides":[{"name":"backend","command":["alembic","upgrade","head"]}]}' \
+            --query 'tasks[0].taskArn' \
+            --output text)
+
+          if [ -z "$MIGRATION_TASK" ] || [ "$MIGRATION_TASK" = "None" ]; then
+            echo "Failed to start migration task"
+            exit 1
+          fi
+
+          echo "Migration task started:"
+          echo "$MIGRATION_TASK"
+
+          echo "Waiting for migration task to stop..."
+
+          aws ecs wait tasks-stopped \
+            --cluster gambit-production \
+            --tasks "$MIGRATION_TASK"
+
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster gambit-production \
+            --tasks "$MIGRATION_TASK" \
+            --query 'tasks[0].containers[?name==`backend`].exitCode | [0]' \
+            --output text)
+
+          echo "Migration exit code: $EXIT_CODE"
+
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "Database migration failed."
+
+            aws ecs describe-tasks \
+              --cluster gambit-production \
+              --tasks "$MIGRATION_TASK" \
+              --query 'tasks[0].{LastStatus:lastStatus,StoppedReason:stoppedReason,Containers:containers[].{Name:name,ExitCode:exitCode,Reason:reason}}' \
+              --output table
+
+            exit 1
+          fi
+
+          echo "Database migration completed successfully."
+          
+      # --------------------------------------------------------
       # REGISTER FRONTEND TASK DEFINITION
       # --------------------------------------------------------
 

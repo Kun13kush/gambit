@@ -147,6 +147,7 @@ resource "aws_ecs_service" "backend" {
   desired_count = 1
 
   launch_type = "FARGATE"
+  platform_version = "1.4.0"
 
   network_configuration {
     subnets = [
