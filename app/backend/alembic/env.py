@@ -56,7 +56,7 @@ def get_database_url():
 
 config.set_main_option(
     "sqlalchemy.url",
-    get_database_url(),
+    get_database_url().replace("%", "%%"),
 )
 
 target_metadata = Base.metadata
