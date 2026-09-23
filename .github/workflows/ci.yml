@@ -194,9 +194,6 @@ jobs:
         run: docker compose ps
 
       - name: Wait for PostgreSQL
-        env:
-          POSTGRES_DB: platform
-          POSTGRES_USER: platform
         run: |
           for i in {1..30}; do
             if docker compose exec -T postgres \
@@ -247,7 +244,7 @@ jobs:
 
 
   # ============================================================
-  # PUSH IMAGES TO ECR
+  # PUSH IMAGES TO AMAZON ECR
   # ============================================================
 
   ecr:
@@ -281,8 +278,7 @@ jobs:
           aws-region: eu-west-2
 
       - name: Verify AWS identity
-        run: |
-          aws sts get-caller-identity
+        run: aws sts get-caller-identity
 
       - name: Login to Amazon ECR
         id: login-ecr
@@ -329,11 +325,6 @@ jobs:
       contents: read
 
     steps:
-
-      # --------------------------------------------------------
-      # CHECKOUT
-      # --------------------------------------------------------
-
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -348,42 +339,33 @@ jobs:
           role-to-assume: arn:aws:iam::732108543574:role/GitHubActionsECRRole
           aws-region: eu-west-2
 
-
-      # --------------------------------------------------------
-      # VERIFY AWS
-      # --------------------------------------------------------
-
       - name: Verify AWS identity
-        run: |
-          aws sts get-caller-identity
+        run: aws sts get-caller-identity
 
 
       # --------------------------------------------------------
-      # DOWNLOAD CURRENT BACKEND TASK DEFINITION
+      # DOWNLOAD CURRENT TASK DEFINITIONS
       # --------------------------------------------------------
 
       - name: Download backend task definition
         run: |
           aws ecs describe-task-definition \
+            --region eu-west-2 \
             --task-definition gambit-production-backend \
             --query taskDefinition \
             > backend-task-definition.json
 
-
-      # --------------------------------------------------------
-      # DOWNLOAD CURRENT FRONTEND TASK DEFINITION
-      # --------------------------------------------------------
-
       - name: Download frontend task definition
         run: |
           aws ecs describe-task-definition \
+            --region eu-west-2 \
             --task-definition gambit-production-frontend \
             --query taskDefinition \
             > frontend-task-definition.json
 
 
       # --------------------------------------------------------
-      # UPDATE BACKEND IMAGE
+      # UPDATE TASK DEFINITION IMAGES
       # --------------------------------------------------------
 
       - name: Update backend task definition
@@ -393,11 +375,6 @@ jobs:
           task-definition: backend-task-definition.json
           container-name: backend
           image: 732108543574.dkr.ecr.eu-west-2.amazonaws.com/gambit-backend:${{ github.sha }}
-
-
-      # --------------------------------------------------------
-      # UPDATE FRONTEND IMAGE
-      # --------------------------------------------------------
 
       - name: Update frontend task definition
         id: frontend-task
@@ -416,6 +393,7 @@ jobs:
         id: register-backend
         run: |
           BACKEND_TASK_DEFINITION=$(aws ecs register-task-definition \
+            --region eu-west-2 \
             --cli-input-json file://${{ steps.backend-task.outputs.task-definition }} \
             --query 'taskDefinition.taskDefinitionArn' \
             --output text)
@@ -428,25 +406,39 @@ jobs:
 
       # --------------------------------------------------------
       # RUN DATABASE MIGRATIONS
-      # ------------------------------------------------
+      # --------------------------------------------------------
 
       - name: Run database migrations
         id: migrate
+        shell: bash
         run: |
+          set -Eeuo pipefail
+
           echo "Starting Alembic migration task..."
 
-           MIGRATION_TASK=$(aws ecs run-task \
+          RUN_TASK_JSON="$(aws ecs run-task \
+            --region eu-west-2 \
             --cluster gambit-production \
             --launch-type FARGATE \
             --platform-version 1.4.0 \
             --task-definition "$BACKEND_TASK_DEFINITION" \
             --network-configuration 'awsvpcConfiguration={subnets=[subnet-0839debbe7ce3d789,subnet-097743546f0faa3ab],securityGroups=[sg-0c885545cf23c596c],assignPublicIp=DISABLED}' \
             --overrides '{"containerOverrides":[{"name":"backend","command":["alembic","upgrade","head"]}]}' \
-            --query 'tasks[0].taskArn' \
-            --output text)
+            --output json)"
 
-          if [ -z "$MIGRATION_TASK" ] || [ "$MIGRATION_TASK" = "None" ]; then
-            echo "Failed to start migration task"
+          echo "ECS run-task response:"
+          echo "$RUN_TASK_JSON" | jq .
+
+          TASK_FAILURE="$(echo "$RUN_TASK_JSON" | jq -r '.failures[0].reason // empty')"
+          MIGRATION_TASK="$(echo "$RUN_TASK_JSON" | jq -r '.tasks[0].taskArn // empty')"
+
+          if [[ -n "$TASK_FAILURE" ]]; then
+            echo "Failed to start migration task: $TASK_FAILURE"
+            exit 1
+          fi
+
+          if [[ -z "$MIGRATION_TASK" ]]; then
+            echo "ECS returned no migration task ARN"
             exit 1
           fi
 
@@ -456,31 +448,71 @@ jobs:
           echo "Waiting for migration task to stop..."
 
           aws ecs wait tasks-stopped \
+            --region eu-west-2 \
             --cluster gambit-production \
             --tasks "$MIGRATION_TASK"
 
-          EXIT_CODE=$(aws ecs describe-tasks \
+          TASK_JSON="$(aws ecs describe-tasks \
+            --region eu-west-2 \
             --cluster gambit-production \
             --tasks "$MIGRATION_TASK" \
-            --query 'tasks[0].containers[?name==`backend`].exitCode | [0]' \
-            --output text)
+            --output json)"
+
+          echo "Migration task status:"
+          echo "$TASK_JSON" | jq '
+            .tasks[0] |
+            {
+              lastStatus,
+              stoppedReason,
+              stopCode,
+              containers: [
+                .containers[] |
+                {
+                  name,
+                  lastStatus,
+                  exitCode,
+                  reason,
+                  logStreamName
+                }
+              ]
+            }
+          '
+
+          EXIT_CODE="$(echo "$TASK_JSON" | jq -r '
+            .tasks[0].containers[]
+            | select(.name == "backend")
+            | .exitCode // 1
+          ')"
 
           echo "Migration exit code: $EXIT_CODE"
 
-          if [ "$EXIT_CODE" != "0" ]; then
+          if [[ "$EXIT_CODE" != "0" ]]; then
+            LOG_STREAM="$(echo "$TASK_JSON" | jq -r '
+              .tasks[0].containers[]
+              | select(.name == "backend")
+              | .logStreamName // empty
+            ')"
+
+            if [[ -n "$LOG_STREAM" && "$LOG_STREAM" != "None" ]]; then
+              echo "Migration logs:"
+              aws logs get-log-events \
+                --region eu-west-2 \
+                --log-group-name /ecs/gambit-production \
+                --log-stream-name "$LOG_STREAM" \
+                --start-from-head \
+                --query 'events[].message' \
+                --output text || true
+            else
+              echo "No CloudWatch log stream was returned."
+            fi
+
             echo "Database migration failed."
-
-            aws ecs describe-tasks \
-              --cluster gambit-production \
-              --tasks "$MIGRATION_TASK" \
-              --query 'tasks[0].{LastStatus:lastStatus,StoppedReason:stoppedReason,Containers:containers[].{Name:name,ExitCode:exitCode,Reason:reason}}' \
-              --output table
-
             exit 1
           fi
 
           echo "Database migration completed successfully."
-          
+
+
       # --------------------------------------------------------
       # REGISTER FRONTEND TASK DEFINITION
       # --------------------------------------------------------
@@ -489,6 +521,7 @@ jobs:
         id: register-frontend
         run: |
           FRONTEND_TASK_DEFINITION=$(aws ecs register-task-definition \
+            --region eu-west-2 \
             --cli-input-json file://${{ steps.frontend-task.outputs.task-definition }} \
             --query 'taskDefinition.taskDefinitionArn' \
             --output text)
@@ -500,47 +533,41 @@ jobs:
 
 
       # --------------------------------------------------------
-      # UPDATE BACKEND ECS SERVICE
+      # UPDATE ECS SERVICES
       # --------------------------------------------------------
 
       - name: Update backend ECS service
         run: |
           aws ecs update-service \
+            --region eu-west-2 \
             --cluster gambit-production \
             --service gambit-production-backend \
             --task-definition "$BACKEND_TASK_DEFINITION"
 
-
-      # --------------------------------------------------------
-      # UPDATE FRONTEND ECS SERVICE
-      # --------------------------------------------------------
-
       - name: Update frontend ECS service
         run: |
           aws ecs update-service \
+            --region eu-west-2 \
             --cluster gambit-production \
             --service gambit-production-frontend \
             --task-definition "$FRONTEND_TASK_DEFINITION"
 
 
       # --------------------------------------------------------
-      # WAIT FOR BACKEND
+      # WAIT FOR SERVICES
       # --------------------------------------------------------
 
       - name: Wait for backend deployment
         run: |
           aws ecs wait services-stable \
+            --region eu-west-2 \
             --cluster gambit-production \
             --services gambit-production-backend
-
-
-      # --------------------------------------------------------
-      # WAIT FOR FRONTEND
-      # --------------------------------------------------------
 
       - name: Wait for frontend deployment
         run: |
           aws ecs wait services-stable \
+            --region eu-west-2 \
             --cluster gambit-production \
             --services gambit-production-frontend
 
@@ -552,6 +579,7 @@ jobs:
       - name: Verify ECS services
         run: |
           aws ecs describe-services \
+            --region eu-west-2 \
             --cluster gambit-production \
             --services \
               gambit-production-backend \

@@ -1,0 +1,35 @@
+{
+    "Revision": 7,
+    "Environment": [
+        {
+            "name": "DB_NAME",
+            "value": "platform"
+        },
+        {
+            "name": "APP_VERSION",
+            "value": "1.0.0"
+        },
+        {
+            "name": "DB_HOST",
+            "value": "gambit-production-postgres.c5aka8yagvjm.eu-west-2.rds.amazonaws.com"
+        },
+        {
+            "name": "DB_PORT",
+            "value": "5432"
+        },
+        {
+            "name": "ENVIRONMENT",
+            "value": "production"
+        }
+    ],
+    "Secrets": [
+        {
+            "name": "DB_USERNAME",
+            "valueFrom": "arn:aws:secretsmanager:eu-west-2:732108543574:secret:rds!db-04052c9d-49da-4a13-8bc1-c19754f901a1-IKMJND:username::"
+        },
+        {
+            "name": "DB_PASSWORD",
+            "valueFrom": "arn:aws:secretsmanager:eu-west-2:732108543574:secret:rds!db-04052c9d-49da-4a13-8bc1-c19754f901a1-IKMJND:password::"
+        }
+    ]
+}
