@@ -1,3 +1,4 @@
+import os
 from datetime import UTC, datetime
 
 from fastapi import APIRouter
@@ -17,6 +18,6 @@ def health():
 def info():
     return {
         "application": "production-aws-platform",
-        "version": "1.0.0",
-        "environment": "development",
+        "version": os.getenv("APP_VERSION", "1.0.0"),
+        "environment": os.getenv("ENVIRONMENT", "development"),
     }
