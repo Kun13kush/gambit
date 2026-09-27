@@ -278,13 +278,17 @@ jobs:
 
       - name: Debug OIDC Token
         run: |
-          # Get the OIDC token to inspect
-          TOKEN="${{ secrets.GITHUB_TOKEN }}"
-          echo "Token length: ${#TOKEN}"
-          
-          # Use curl with GITHUB_SERVER_URL to request a token
-          curl -H "Authorization: bearer ${{ secrets.GITHUB_TOKEN }}" \
-            "${{ env.GITHUB_SERVER_URL }}/api/v3/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}" | head -20
+          # This is the correct way to get and inspect the OIDC token
+          OIDC_TOKEN=$(curl -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL" | jq -r '.token')
+    
+    # Decode and inspect the JWT claims
+          echo "OIDC Token Claims:"
+          echo "$OIDC_TOKEN" | cut -d '.' -f2 | base64 --decode | jq .
+          echo ""
+          echo "=== Expected in trust policy ==="
+          echo "aud: sts.amazonaws.com"
+          echo "sub: repo:Kun13kush/gambit:ref:refs/heads/develop"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
