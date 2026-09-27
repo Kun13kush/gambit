@@ -5,9 +5,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .routes import deployments, health, services
 
+environment = os.getenv("ENVIRONMENT", "development")
+
 app = FastAPI(
     title="Production AWS Platform API",
     version="1.0.0",
+    docs_url=None if environment == "production" else "/docs",
+    redoc_url=None if environment == "production" else "/redoc",
+    openapi_url=None if environment == "production" else "/openapi.json",
 )
 
 frontend_url = os.getenv(
