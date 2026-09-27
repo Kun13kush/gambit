@@ -367,6 +367,27 @@ jobs:
             --query taskDefinition \
             > frontend-task-definition.json
 
+      # SET PRODUCTION CORS
+      # --------------------------------------------------------
+
+      - name: Set production CORS origin
+        run: |
+          jq '.containerDefinitions |= map(
+            if .name == "backend"
+            then
+              .environment = (
+                (.environment // [])
+                | map(select(.name != "FRONTEND_URL"))
+                + [{
+                    "name": "FRONTEND_URL",
+                    "value": "http://gambit-production-alb-563168449.eu-west-2.elb.amazonaws.com"
+                  }]
+              )
+            else .
+            end
+          )' backend-task-definition.json > backend-task-definition.tmp.json
+
+          mv backend-task-definition.tmp.json backend-task-definition.json
 
       # --------------------------------------------------------
       # UPDATE TASK DEFINITION IMAGES

@@ -51,6 +51,10 @@ resource "aws_ecs_task_definition" "backend" {
           value = "1.0.0"
         },
         {
+          name  = "FRONTEND_URL"
+          value = "http://${aws_lb.gambit.dns_name}"
+        },
+        {
           name  = "DB_HOST"
           value = aws_db_instance.gambit.address
         },

@@ -161,7 +161,7 @@ resource "aws_lb_listener_rule" "backend_services" {
 
   condition {
     path_pattern {
-      values = ["/services", "/services/*"]
+      values = ["/api/services", "/api/services/*"]
     }
   }
 }
@@ -183,7 +183,7 @@ resource "aws_lb_listener_rule" "backend_deployments" {
 
   condition {
     path_pattern {
-      values = ["/deployments", "/deployments/*"]
+      values = ["/api/deployments", "/api/deployments/*"]
     }
   }
 }
