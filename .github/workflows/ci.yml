@@ -268,9 +268,23 @@ jobs:
           echo "Ref: $GITHUB_REF"
           echo "Ref name: $GITHUB_REF_NAME"
           echo "Event: $GITHUB_EVENT_NAME"
+          echo "Actor: $GITHUB_ACTOR"
+          echo "Workflow: $GITHUB_WORKFLOW"
+          echo "Run ID: $GITHUB_RUN_ID"
+
 
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Debug OIDC Token
+        run: |
+          # Get the OIDC token to inspect
+          TOKEN="${{ secrets.GITHUB_TOKEN }}"
+          echo "Token length: ${#TOKEN}"
+          
+          # Use curl with GITHUB_SERVER_URL to request a token
+          curl -H "Authorization: bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "${{ env.GITHUB_SERVER_URL }}/api/v3/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}" | head -20
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
