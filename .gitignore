@@ -21,7 +21,6 @@ frontend/dist/
 .terraform/
 *.tfstate
 *.tfstate.*
-.terraform.lock.hcl
 
 # OS
 .DS_Store
