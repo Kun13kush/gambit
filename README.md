@@ -48,7 +48,7 @@ docker-compose up
 ---
 
 ## Architecture
-
+![Gambit Production Architecture](docs/architecture.png)
 ```
                      Internet
                         |
@@ -246,7 +246,7 @@ Monitored metrics with SNS email alerts:
 
 ### RDS Configuration
 - ✅ **Point-in-time recovery**: Restore to any point within retention period
-- ✅ **Automated backups**: Daily snapshots
+- ✅ **Automated backups**: Enabled with point-in-time recovery
 - ✅ **Manual snapshots**: On-demand backup capability
 - ✅ **Deletion protection**: Prevents accidental deletion
 
@@ -288,13 +288,13 @@ The following are **intentionally documented** production limitations:
 
 | Limitation | Impact | Status |
 |------------|--------|--------|
-| HTTP instead of HTTPS | Unencrypted traffic | Use CloudFront + ACM for production |
+|  HTTP-only ALB | Client-to-ALB traffic is not TLS encrypted | Add ACM/HTTPS, typically with CloudFront or an HTTPS ALB listener |
 | RDS Multi-AZ disabled | Single point of failure | Enable for production HA |
 | 1-day backup retention | Limited recovery window | Increase to 7+ days |
 | No restore drill executed | Untested recovery process | Schedule quarterly drills |
-| ECR image scanning disabled | Vulnerability detection delayed | Enable on-push scanning |
+| ECR native image scanning is disabled; | Vulnerability detection delayed | Enable on-push scanning |
 | ECR mutable tags | Risk of tag overwrite | Use immutable tags in prod |
-| ECS IAM wildcards | Over-permissive roles | Scope to specific resources |
+| Remaining IAM resource wildcards | Some permissions retain broader resource scope where required by AWS APIs | Further resource-level scoping can be applied where supported |
 | Terraform not authoritative for active ECS revisions | GitHub Actions manages application deployment revisions | Keep infrastructure and application deployment responsibilities documented separately |
 
 ---
