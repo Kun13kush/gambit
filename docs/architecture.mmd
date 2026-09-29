@@ -1,0 +1,54 @@
+flowchart TB
+    U["Internet Users"]
+
+    subgraph AWS["AWS eu-west-2 — Gambit Production"]
+        direction TB
+
+        subgraph VPC["VPC 10.0.0.0/16"]
+            direction TB
+
+            subgraph PUB["Public Subnets — eu-west-2a / eu-west-2b"]
+                ALB["Application Load Balancer<br/>HTTP :80"]
+            end
+
+            subgraph APP["Private Application Subnets — eu-west-2a / eu-west-2b"]
+                FE["ECS Fargate — Frontend<br/>Nginx :80<br/>Desired count: 1"]
+                BE["ECS Fargate — Backend<br/>FastAPI :8000<br/>Desired count: 1"]
+            end
+
+            subgraph DBNET["Private RDS Subnet Group — eu-west-2a / eu-west-2b / eu-west-2c"]
+                DB["Amazon RDS PostgreSQL 16.15<br/>Private :5432<br/>Multi-AZ: Disabled"]
+            end
+
+            ALB -->|HTTP| FE
+            ALB -->|API traffic| BE
+            BE -->|PostgreSQL| DB
+        end
+
+        SM["AWS Secrets Manager<br/>Production DB secret"]
+        CW["Amazon CloudWatch<br/>Logs • Container Insights • Alarms"]
+        SNS["Amazon SNS<br/>gambit-production-alerts"]
+        ECR["Amazon ECR<br/>gambit-frontend<br/>gambit-backend"]
+    end
+
+    GH["GitHub Repository"]
+    GA["GitHub Actions<br/>OIDC Federation"]
+    MIG["Fargate Migration Task<br/>alembic upgrade head"]
+
+    U --> ALB
+    GH --> GA
+    GA -->|Push images| ECR
+    GA -.->|Deploy| FE
+    GA -.->|Deploy| BE
+    GA -.->|Run migration| MIG
+    MIG -->|Schema changes| DB
+    SM -->|Database secret| BE
+
+    FE -.->|Logs / metrics| CW
+    BE -.->|Logs / metrics| CW
+    DB -.->|Monitoring| CW
+    ALB -.->|Metrics / alarms| CW
+    CW -->|Notifications| SNS
+
+    NOTE["Current limitations:<br/>ECS desired count 1 • RDS Multi-AZ disabled<br/>HTTP :80 only • 1-day backup retention<br/>No multi-region DR • No formal RTO/RPO"]
+    AWS --- NOTE
